@@ -5,8 +5,10 @@
 .fvec projection[4]
 
 ; Constants
-.constf myconst(0.0, 1.0, -1.0, 0.0)
-.alias ones myconst.yyyy ; (1.0,1.0,1.0,1.0)
+.constf consts1(0.0, 1.0, 2.0, 0.5)
+.constf consts2(-4.0, 0.5, 0.0, 0.0)
+.alias zeros consts1.xxxx
+.alias ones consts1.yyyy ; (1.0,1.0,1.0,1.0)
 
 ; Outputs : here only position and color
 .out outpos position
@@ -30,10 +32,12 @@
 	dp4 outpos.y, projection[1], r0
 	dp4 outpos.z, projection[2], r0
 	dp4 outpos.w, projection[3], r0
+
 	mov outtex0, intex0
 	mov outtex1, intex0
 	mov outtex2, intex0
 	; Set vertex color to white rgba => (1.0,1.0,1.0,1.0)
-	mov outclr, incolor
+	add r0, consts2.xxxx, incolor
+	mul outclr, consts2.yyyy, r0
 	end
 .end

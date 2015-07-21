@@ -119,7 +119,9 @@ void gpuUIInit()
 
     shaderProgramUse(&shader); // Select the shader to use
 
-    initOrthographicMatrix(ortho_matrix, 0.0f, 400.0f, 0.0f, 240.0f, 0.0f, 1.0f); // A basic projection for 2D drawings
+    initOrthographicMatrix(ortho_matrix, 0.0f, 400.0f, 240.0f, 0.0f, 0.0f, 1.0f); // A basic projection for 2D drawings
+	rotateMatrixZ(ortho_matrix, 1.570796327f, true);
+
     SetUniformMatrix(projUniformRegister, ortho_matrix); // Upload the matrix to the GPU
 
     GPU_DepthMap(-1.0f, 0.0f);  //Be careful, standard OpenGL clipping is [-1;1], but it is [-1;0] on the pica200
@@ -222,7 +224,7 @@ static inline u32 get_morton_offset(u32 x, u32 y, u32 bytes_per_pixel)
 }
 
 
-void copyTextureAndTile(u8* dst,u8 * src,int w ,int h)
+void copyTextureAndTile(u8* dst, const u8* src, int w, int h)
 {
 	int i, j;
 	for (j = 0; j < h; j++) {

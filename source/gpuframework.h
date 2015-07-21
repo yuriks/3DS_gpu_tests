@@ -54,4 +54,4 @@ void gpuUIExit();
 void gpuStartFrame();
 void gpuEndFrame();
 void GPU_SetDummyTexEnv(u8 num);
-void copyTextureAndTile(u8* dst,u8 * src,int w ,int h);
+void copyTextureAndTile(u8* dst, const u8* src, int w, int h);
