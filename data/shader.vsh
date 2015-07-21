@@ -6,7 +6,7 @@
 
 ; Constants
 .constf consts1(0.0, 1.0, 2.0, 0.5)
-.constf consts2(-4.0, 0.5, 0.0, 0.0)
+.constf consts2(0.003921586, 0.0, 0.0, 0.0)
 .alias zeros consts1.xxxx
 .alias ones consts1.yyyy ; (1.0,1.0,1.0,1.0)
 
@@ -37,7 +37,6 @@
 	mov outtex1, intex0
 	mov outtex2, intex0
 	; Set vertex color to white rgba => (1.0,1.0,1.0,1.0)
-	add r0, consts2.xxxx, incolor
-	mul outclr, consts2.yyyy, r0
+	mul outclr, consts2.xxxx, incolor
 	end
 .end
