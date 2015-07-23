@@ -26,6 +26,8 @@ u32*gpuColorBuffer;
 u32*gpuDBuffer;
 u32* gpuCmd;
 
+extern shaderProgram_s shader;
+
 typedef struct {
     float x, y;
 } vector_2f;

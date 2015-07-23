@@ -3,29 +3,23 @@
 
 ; Uniforms
 .fvec projection[4]
+.bool choose_z
 
 ; Constants
 .constf consts1(0.0, 1.0, 2.0, 0.5)
-.constf consts2(0.003921586, 0.0, 0.0, 0.0)
-.alias zeros consts1.xxxx
-.alias ones consts1.yyyy ; (1.0,1.0,1.0,1.0)
 
 ; Outputs : here only position and color
 .out outpos position
 .out outclr color
-.out outtex0 texcoord0
-.out outtex1 texcoord1
-.out outtex2 texcoord2
 
 ; Inputs : here we have only vertices
 .alias inpos v0
 .alias incolor v1
-.alias intex0 v2
 
 .proc main
 	; r0 = (inpos.x, inpos.y, inpos.z, 1.0)
-	mov r0.xyz, inpos
-	mov r0.w, ones
+	; inpos.w isn't specified by the vertex array, but is implicitly intiialized to 1.0 by the GPU
+	mov r0, inpos
 	
 	; outpos = projection * r1
 	dp4 outpos.x, projection[0], r0
@@ -33,10 +27,16 @@
 	dp4 outpos.z, projection[2], r0
 	dp4 outpos.w, projection[3], r0
 
-	mov outtex0, intex0
-	mov outtex1, intex0
-	mov outtex2, intex0
-	; Set vertex color to white rgba => (1.0,1.0,1.0,1.0)
-	mul outclr, consts2.xxxx, incolor
+	; Set vertex c olor
+	mov outclr.xy, incolor
+	mov outclr.w, consts1.y
+
+	; incolor.zw aren't specified by the vertex array, but are implicitly initialized to 0.0 and 1.0 by the GPU
+	ifu choose_z
+		mov outclr.z, incolor.zzzz
+	.else
+		mov outclr.z, incolor.wwww
+	.end
+
 	end
 .end

@@ -1,13 +1,7 @@
 /**
 * Hello Triangle example, made by Lectem
-*
-* Draws a white triangle using the 3DS GPU.
-* This example should give you enough hints and links on how to use the GPU for basic non-textured rendering.
-* Another version of this example will be made with colors.
-*
 * Thanks to smea, fincs, neobrain, xerpi and all those who helped me understand how the 3DS GPU works
 */
-
 
 #include <3ds.h>
 #include <stdio.h>
@@ -15,40 +9,48 @@
 #include <string.h>
 #include "gpuframework.h"
 
-#define COLOR_WHITE {0xFF,0xFF,0xFF,0xFF}
-#define COLOR_RED	{0xFF,0x00,0x00,0xFF}
-#define COLOR_GREEN {0x00,0xFF,0x00,0xFF}
-#define COLOR_BLUE	{0x00,0x00,0xFF,0xFF}
+/**
+ * Vertex shader input components that aren't specified by data in the vertex
+ * array (because it has less than 4 components, like the color attribute in
+ * this test) take on a default value of (_, 0.0, 0.0, 1.0) for the missing
+ * components. (At least one component is required, so the the .x component
+ * can't have a default.) Specifically, unspecified components are *not* taken
+ * from a "default attribute" specified for the vertex: if there's an array
+ * bound to the attribute, the "default attribute" is completely ignored.
+ *
+ * The test renders two triangles, specifying only .xyz components of the
+ * position and .xy components of the color. The vertex shader then uses all 4
+ * input components of both input attributes to produce the output. Due to the
+ * default attribute values, position.w takes on to 1.0 and color.zw take on
+ * 0.0 and 1.0. The result is one triangle is rendered in yellow fading to dark
+ * yellow (produced by e.g. the input [1, 1, _, _] being completed with 0.0,
+ * giving [1, 1, 0]) and another with one vertex each in pure red, pure green
+ * and black (again, due to the blue attribute taking the value 0).  To verify
+ * the same also works for .w, you can press the A button to make the shader
+ * instead set the output color to incolor.xyw. This should produce blue or
+ * bluish triangles.
+ *
+ * "Default" attribute values of [0.5, 0.5, 0.5, 0.5] are specified for the
+ * color attribute. They are not used by the hardware, otherwise using .z or .w
+ * would yield the same slightly bluish triangles, which is not the case.
+ */
 
 typedef struct Vertex {
 	float pos[3];
-	float texcoord[2];
-	u8 color[2];
+	float color[2];
 } Vertex;
 
-//Our data
 static const Vertex test_mesh[] = {
-	{{  0.0f,   0.0f, 0.5f}, {0.0f, 0.0f}, {0xFF,0xFF,/*0xFF,0xFF*/}},
-	{{400.0f,   0.0f, 0.5f}, {1.0f, 0.0f}, {0x64,0x64,/*0x64,0xFF*/}},
-	{{400.0f, 240.0f, 0.5f}, {1.0f, 1.0f}, {0xFF,0xFF,/*0xFF,0xFF*/}},
+	// Top-right triangle
+	{{  0.0f,   0.0f, 0.5f}, {1.0f, 1.0f}},
+	{{400.0f,   0.0f, 0.5f}, {0.4f, 0.4f}},
+	{{400.0f, 240.0f, 0.5f}, {1.0f, 1.0f}},
 
-	{{400.0f, 240.0f, 0.5f}, {1.0f, 1.0f}, {0xFF,0x00,/*0x00,0xFF*/}},
-	{{  0.0f, 240.0f, 0.5f}, {0.0f, 1.0f}, {0x00,0xFF,/*0x00,0xFF*/}},
-	{{  0.0f,   0.0f, 0.5f}, {0.0f, 0.0f}, {0x00,0x00,/*0xFF,0xFF*/}}
+	// Bottom-left triangle
+	{{400.0f, 240.0f, 0.5f}, {1.0f, 0.0f}},
+	{{  0.0f, 240.0f, 0.5f}, {0.0f, 1.0f}},
+	{{  0.0f,   0.0f, 0.5f}, {0.0f, 0.0f}},
 };
-
-static void* test_data = NULL;
-
-static u32* test_texture=NULL;
-static const u16 test_texture_w=256;
-static const u16 test_texture_h=256;
-
-extern const struct {
-  u32	 width;
-  u32	 height;
-  u32	 bytes_per_pixel; /* 2:RGB16, 3:RGB, 4:RGBA */ 
-  u8	 pixel_data[256 * 256 * 4 + 1];
-} texture_data;
 
 typedef struct VertexArrayConfig {
 	u32 address_offset;
@@ -67,6 +69,7 @@ typedef struct VertexAttributeConfig {
 	VertexArrayConfig arrays[12];
 } VertexAttributeConfig;
 
+// Just a re-implementation of the equivalent ctrulib function but with a nice interface
 void GPUY_ConfigureAttributes(const VertexAttributeConfig* config) {
 	u32 buffer[39];
 
@@ -151,66 +154,58 @@ int main(int argc, char** argv)
 	gpuUIInit();
 
 	printf("hello triangle !\n");
-	test_data = linearAlloc(sizeof(test_mesh));		//allocate our vbo on the linear heap
+	void* test_data = linearAlloc(sizeof(test_mesh));		//allocate our vbo on the linear heap
 	memcpy(test_data, test_mesh, sizeof(test_mesh)); //Copy our data
 
 	VertexAttributeConfig attribute_config = {
-		.default_attribute_mask = 0x004,
-		.num_attributes = 3,
+		.default_attribute_mask = BIT(1), // enable default attribute value for attribute 1 (color)
+		.num_attributes = 2,
 		.num_arrays = 1,
 		.array_address_base = osConvertVirtToPhys((uintptr_t)test_data),
 		.attribute_types =
-			GPU_ATTRIBFMT(0, 3, GPU_FLOAT) |
-			GPU_ATTRIBFMT(1, 2, GPU_FLOAT) |
-			GPU_ATTRIBFMT(2, 2, GPU_UNSIGNED_BYTE),
+			GPU_ATTRIBFMT(0, 3, GPU_FLOAT) | // float pos[3]
+			GPU_ATTRIBFMT(1, 2, GPU_FLOAT),  // float color[2]
 		.arrays = {
-			{ .address_offset = 0, .attribute_map0 = 0x210, .stride = sizeof(Vertex), .num_attributes = 3 },
+			{ .address_offset = 0, .attribute_map0 = 0x10, .stride = sizeof(Vertex), .num_attributes = 2 },
 		},
 	};
 
-	//Allocate a RGBA8 texture with dimensions of 1x1
-	test_texture = linearMemAlign(test_texture_w*test_texture_h*sizeof(u32),0x80);
+	//u32 choose_z_uniform = shaderInstanceGetUniformLocation(shader.vertexShader, "choose_z");
+	u32 choose_z_uniform = 0; // ctrulib is broken, so need to hardcode id here
 
-	copyTextureAndTile((u8*)test_texture,texture_data.pixel_data,texture_data.width ,texture_data.height);
-	
-	if(!test_texture)printf("couldn't allocate test_texture\n");
-	do{
+	bool choose_z = true;
+
+	do {
 		hidScanInput();
 		u32 keys = keysDown();
-		if(keys&KEY_START)break; //Stop the program when Start is pressed
-
+		if (keys & KEY_START) break; //Stop the program when Start is pressed
+		if (keys & KEY_A) {
+			choose_z = !choose_z;
+			printf("outcol.b = incolor.%c\n", choose_z ? 'z' : 'w');
+		}
 
 		gpuStartFrame();
 
-		//Setup the buffers data
+		shaderInstanceSetBool(shader.vertexShader, choose_z_uniform, choose_z);
+		shaderProgramUse(&shader);
+
+		// Configure attribute arrays
 		GPUY_ConfigureAttributes(&attribute_config);
-		GPUCMD_AddWrite(0x2bb, 0x00000120);
+		// Configure attribute -> shader input mappings
+		GPUCMD_AddWrite(0x2bb, 0x00000010);
 		GPUCMD_AddWrite(0x2bc, 0x00000000);
 
-		float tmp[4] = {127.0f, 127.0f, 255.0f, 255.0f};
-		GPUY_SetDefaultAttribute(2, tmp);
+		float in_color_default[4] = {0.5f, 0.5f, 0.5f, 0.5f};
+		GPUY_SetDefaultAttribute(1, in_color_default);
 
-		GPU_SetTextureEnable(GPU_TEXUNIT0);
-
-		GPU_SetTexture(
-				GPU_TEXUNIT0,
-				(u32 *)osConvertVirtToPhys((u32) test_texture),
-				// width and height swapped?
-				test_texture_h,
-				test_texture_w,
-				GPU_TEXTURE_MAG_FILTER(GPU_LINEAR) | GPU_TEXTURE_MIN_FILTER(GPU_LINEAR) |
-				GPU_TEXTURE_WRAP_S(GPU_CLAMP_TO_EDGE) | GPU_TEXTURE_WRAP_T(GPU_CLAMP_TO_EDGE),
-				GPU_RGBA8
-		);
-//		  GPUCMD_AddWrite(GPUREG_0081, 0xFFFF0000);
 		int texenvnum=0;
 		GPU_SetTexEnv(
 				texenvnum,
-				GPU_TEVSOURCES(GPU_PRIMARY_COLOR, GPU_TEXTURE0, 0),
-				GPU_TEVSOURCES(GPU_PRIMARY_COLOR, GPU_TEXTURE0, 0),
+				GPU_TEVSOURCES(GPU_PRIMARY_COLOR, 0, 0),
+				GPU_TEVSOURCES(GPU_PRIMARY_COLOR, 0, 0),
 				GPU_TEVOPERANDS(0, 0, 0),
 				GPU_TEVOPERANDS(0, 0, 0),
-				GPU_MODULATE, GPU_MODULATE,
+				GPU_REPLACE, GPU_REPLACE,
 				0xAABBCCDD
 		);
 
@@ -218,20 +213,11 @@ int main(int argc, char** argv)
 		GPU_DrawArray(GPU_TRIANGLES, sizeof(test_mesh) / sizeof(test_mesh[0]));
 
 		gpuEndFrame();
-	}while(aptMainLoop() );
+	} while(aptMainLoop());
 
-
-	if(test_data)
-	{
-		linearFree(test_data);
-	}
-	if(test_texture)
-	{
-		linearFree(test_texture);
-	}
+	linearFree(test_data);
 
 	gpuUIExit();
-
 
 	gfxExit();
 	sdmcExit();
