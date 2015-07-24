@@ -37,17 +37,17 @@
 
 typedef struct Vertex {
 	float pos[3];
-	float color[2];
+	float texcoord[2];
 } Vertex;
 
 static const Vertex test_mesh[] = {
 	// Top-right triangle
-	{{  0.0f,   0.0f, 0.5f}, {1.0f, 1.0f}},
-	{{400.0f,   0.0f, 0.5f}, {0.4f, 0.4f}},
+	{{  0.0f,   0.0f, 0.5f}, {0.0f, 0.0f}},
+	{{400.0f,   0.0f, 0.5f}, {1.0f, 0.0f}},
 	{{400.0f, 240.0f, 0.5f}, {1.0f, 1.0f}},
 
 	// Bottom-left triangle
-	{{400.0f, 240.0f, 0.5f}, {1.0f, 0.0f}},
+	{{400.0f, 240.0f, 0.5f}, {1.0f, 1.0f}},
 	{{  0.0f, 240.0f, 0.5f}, {0.0f, 1.0f}},
 	{{  0.0f,   0.0f, 0.5f}, {0.0f, 0.0f}},
 };
@@ -158,36 +158,37 @@ int main(int argc, char** argv)
 	memcpy(test_data, test_mesh, sizeof(test_mesh)); //Copy our data
 
 	VertexAttributeConfig attribute_config = {
-		.default_attribute_mask = BIT(1), // enable default attribute value for attribute 1 (color)
+		.default_attribute_mask = 0,
 		.num_attributes = 2,
 		.num_arrays = 1,
 		.array_address_base = osConvertVirtToPhys((uintptr_t)test_data),
 		.attribute_types =
 			GPU_ATTRIBFMT(0, 3, GPU_FLOAT) | // float pos[3]
-			GPU_ATTRIBFMT(1, 2, GPU_FLOAT),  // float color[2]
+			GPU_ATTRIBFMT(1, 2, GPU_FLOAT),  // float texcoord[2]
 		.arrays = {
 			{ .address_offset = 0, .attribute_map0 = 0x10, .stride = sizeof(Vertex), .num_attributes = 2 },
 		},
 	};
 
-	//u32 choose_z_uniform = shaderInstanceGetUniformLocation(shader.vertexShader, "choose_z");
-	u32 choose_z_uniform = 0; // ctrulib is broken, so need to hardcode id here
+	size_t texture_size = 64 * 64 * sizeof(u16);
+	u16* texture_data = linearAlloc(texture_size);
 
-	bool choose_z = true;
+	u16* buffer = malloc(texture_size);
+	for (int y = 0; y < 64; ++y) {
+		for (int x = 0; x < 64; ++x) {
+			buffer[y * 64 + x] = ((y << 2 | y >> 6) & 0xFF) << 8 | ((x << 2 | x >> 6) & 0xFF);
+		}
+	}
+
+	copyTextureAndTile16(texture_data, buffer, 64, 64);
+	free(buffer);
 
 	do {
 		hidScanInput();
 		u32 keys = keysDown();
 		if (keys & KEY_START) break; //Stop the program when Start is pressed
-		if (keys & KEY_A) {
-			choose_z = !choose_z;
-			printf("outcol.b = incolor.%c\n", choose_z ? 'z' : 'w');
-		}
 
 		gpuStartFrame();
-
-		shaderInstanceSetBool(shader.vertexShader, choose_z_uniform, choose_z);
-		shaderProgramUse(&shader);
 
 		// Configure attribute arrays
 		GPUY_ConfigureAttributes(&attribute_config);
@@ -195,14 +196,19 @@ int main(int argc, char** argv)
 		GPUCMD_AddWrite(0x2bb, 0x00000010);
 		GPUCMD_AddWrite(0x2bc, 0x00000000);
 
-		float in_color_default[4] = {0.5f, 0.5f, 0.5f, 0.5f};
-		GPUY_SetDefaultAttribute(1, in_color_default);
+		GPU_SetTextureEnable(GPU_TEXUNIT0);
+
+		GPU_SetTexture(GPU_TEXUNIT0, (u32*)osConvertVirtToPhys((u32)texture_data),
+				64, 64,
+				GPU_TEXTURE_MAG_FILTER(GPU_LINEAR) | GPU_TEXTURE_MIN_FILTER(GPU_LINEAR) |
+				GPU_TEXTURE_WRAP_S(GPU_CLAMP_TO_EDGE) | GPU_TEXTURE_WRAP_T(GPU_CLAMP_TO_EDGE),
+				GPU_HILO8);
 
 		int texenvnum=0;
 		GPU_SetTexEnv(
 				texenvnum,
-				GPU_TEVSOURCES(GPU_PRIMARY_COLOR, 0, 0),
-				GPU_TEVSOURCES(GPU_PRIMARY_COLOR, 0, 0),
+				GPU_TEVSOURCES(GPU_TEXTURE0, 0, 0),
+				GPU_TEVSOURCES(GPU_TEXTURE0, 0, 0),
 				GPU_TEVOPERANDS(0, 0, 0),
 				GPU_TEVOPERANDS(0, 0, 0),
 				GPU_REPLACE, GPU_REPLACE,
@@ -215,6 +221,7 @@ int main(int argc, char** argv)
 		gpuEndFrame();
 	} while(aptMainLoop());
 
+	linearFree(texture_data);
 	linearFree(test_data);
 
 	gpuUIExit();

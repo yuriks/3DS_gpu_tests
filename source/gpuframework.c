@@ -119,7 +119,7 @@ void gpuUIInit()
 
     shaderProgramUse(&shader); // Select the shader to use
 
-    initOrthographicMatrix(ortho_matrix, 0.0f, 400.0f, 240.0f, 0.0f, 0.0f, 1.0f); // A basic projection for 2D drawings
+    initOrthographicMatrix(ortho_matrix, 0.0f, 400.0f, 0.0f, 240.0f, 0.0f, 1.0f); // A basic projection for 2D drawings
 	rotateMatrixZ(ortho_matrix, 1.570796327f, true);
 
     SetUniformMatrix(projUniformRegister, ortho_matrix); // Upload the matrix to the GPU
@@ -224,17 +224,36 @@ static inline u32 get_morton_offset(u32 x, u32 y, u32 bytes_per_pixel)
 }
 
 
-void copyTextureAndTile(u8* dst, const u8* src, int w, int h)
-{
-	int i, j;
-	for (j = 0; j < h; j++) {
-		for (i = 0; i < w; i++) {
+void copyTextureAndTile16(u16* dst, const u16* src, unsigned int w, unsigned int h) {
+	for (unsigned int y = 0; y < h; y += 8) {
+		for (unsigned int x = 0; x < w; x += 8) {
+			const u16* line = &src[y * w + x];
 
-			u32 coarse_y = j & ~7;
-			u32 dst_offset = get_morton_offset(i, j, 4) + coarse_y * w * 4;
+			for (unsigned int yy = 0; yy < 8; ++yy) {
+				for (unsigned int xx = 0; xx < 8; ++xx) {
+					dst[morton_interleave(xx, yy)] = line[xx];
+				}
+				line += w;
+			}
 
-			u32 v = ((u32 *)src)[i + (h - 1 - j)*w];
-			*(u32 *)(dst + dst_offset) = __builtin_bswap32(v);
+			dst += 8*8;
+		}
+	}
+}
+
+void copyTextureAndTile32(u32* dst, const u32* src, unsigned int w, unsigned int h) {
+	for (unsigned int y = 0; y < h; y += 8) {
+		for (unsigned int x = 0; x < w; x += 8) {
+			const u32* line = &src[y * w + x];
+
+			for (unsigned int yy = 0; yy < 8; ++yy) {
+				for (unsigned int xx = 0; xx < 8; ++xx) {
+					dst[morton_interleave(xx, yy)] = line[xx];
+				}
+				line += w;
+			}
+
+			dst += 8*8;
 		}
 	}
 }
